@@ -1,11 +1,5 @@
 import AsyncStorageLib from '@react-native-async-storage/async-storage';
-import {
-  configureStore,
-  ThunkAction,
-  Action,
-  combineReducers,
-} from '@reduxjs/toolkit';
-import userReducer from './feature/user/slice';
+import {configureStore, combineReducers} from '@reduxjs/toolkit';
 import {
   FLUSH,
   REHYDRATE,
@@ -16,38 +10,38 @@ import {
   persistReducer,
   persistStore,
 } from 'redux-persist';
-import { logger } from 'redux-logger';
+import createSagaMiddleware from 'redux-saga';
+import rootSaga from './sagas/rootSaga';
+import {peopleReducer} from './slices/people';
 
-const rootPersistConfig = {
+let sagaMiddleware = createSagaMiddleware();
+
+const persistConfig = {
   key: 'root',
+  version: 1,
   storage: AsyncStorageLib,
-  whitelist: ['success'] // only navigation will be persisted
+  whitelist: [],
 };
 
-const reducer = combineReducers({
-  user: persistReducer(rootPersistConfig, userReducer),
+const rootReducer = combineReducers({
+  people: peopleReducer,
 });
 
+const persistedReducer = persistReducer(persistConfig, rootReducer);
+
 export const store = configureStore({
-  reducer,
-  middleware: getDefaultMiddleware =>
-    getDefaultMiddleware({
+  reducer: persistedReducer,
+  middleware: getDefaultMiddleware => [
+    ...getDefaultMiddleware({
+      thunk: false,
       serializableCheck: {
         ignoredActions: [FLUSH, REHYDRATE, PAUSE, PERSIST, PURGE, REGISTER],
       },
-    }).concat(logger),
+    }),
+    sagaMiddleware,
+  ],
 });
 
-export default () => {
-  let persistor = persistStore(store);
-  return {persistor};
-};
+sagaMiddleware.run(rootSaga);
 
-export type AppDispatch = typeof store.dispatch;
-export type RootState = ReturnType<typeof store.getState>;
-export type AppThunk<ReturnType = void> = ThunkAction<
-  ReturnType,
-  RootState,
-  unknown,
-  Action<string>
->;
+export const persistor = persistStore(store);
